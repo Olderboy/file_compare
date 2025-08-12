@@ -18,7 +18,13 @@
    - 能够指出具体哪些行存在差异
    - 支持行内容查看和对比
 
-3. **分块处理策略**
+3. **混合对比策略**
+   - 第一阶段：Hash对比快速定位差异行
+   - 第二阶段：对差异行进行全量对比
+   - 通过关键列匹配，处理数据顺序不一致问题
+   - 大幅提升大数据量场景下的性能
+
+4. **分块处理策略**
    - 将大文件分割成小块进行处理，避免内存溢出
    - 可配置分块大小，根据系统内存情况优化
    - 支持流式处理，边读边处理
@@ -42,9 +48,12 @@
 file_compare/
 ├── csv_compare.py              # 基础版本CSV对比工具
 ├── csv_compare_fast.py         # 高性能版本（pandas+dask）
+├── hybrid_compare.py           # 混合对比工具（Hash对比+差异行全量对比）
 ├── generate_test_data.py       # 测试数据生成脚本
 ├── performance_test.py         # 性能测试脚本
 ├── enhanced_report.py          # 增强版报告生成器（显示具体行号）
+├── example_hybrid_compare.py   # 混合对比工具使用示例
+├── HYBRID_COMPARE_GUIDE.md    # 混合对比工具使用指南
 ├── requirements.txt            # 项目依赖
 └── README.md                   # 项目说明文档
 ```
@@ -111,6 +120,19 @@ python csv_compare_fast.py file1.csv file2.csv --chunk-size 1000000
 | `--output-report` | 输出报告文件路径（包含行号信息） | 无 |
 | `--verbose` | 详细输出模式 | False |
 
+### 混合对比工具参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `file1`, `file2` | 要对比的两个CSV文件路径 | 必需 |
+| `--key-columns` | 用于唯一标识行的关键列名 | 必需 |
+| `--chunk-size` | 分块大小（行数） | 500000 |
+| `--hash-algorithm` | 哈希算法（md5/sha1/sha256） | md5 |
+| `--use-dask` | 启用dask分布式处理 | False |
+| `--memory-limit` | 内存限制 | 2GB |
+| `--output-report` | 输出报告文件路径 | 无 |
+| `--verbose` | 详细输出模式 | False |
+
 ## 性能测试
 
 ### 生成测试数据
@@ -152,6 +174,25 @@ python enhanced_report.py file1.csv file2.csv --detailed
 python enhanced_report.py file1.csv file2.csv --output-dir ./reports
 ```
 
+### 混合对比工具（推荐用于1000万行以上大数据量）
+
+```bash
+# 使用单个关键列（如id）
+python hybrid_compare.py file1.csv file2.csv --key-columns id
+
+# 使用多个关键列（如id + name）
+python hybrid_compare.py file1.csv file2.csv --key-columns id name
+
+# 生成详细报告
+python hybrid_compare.py file1.csv file2.csv --key-columns id --output-report diff_report.txt
+
+# 处理超大文件（启用dask）
+python hybrid_compare.py large_file1.csv large_file2.csv --key-columns id --use-dask --chunk-size 1000000
+
+# 运行使用示例
+python example_hybrid_compare.py
+```
+
 ## 性能基准
 
 ### 测试环境
@@ -191,6 +232,14 @@ python enhanced_report.py file1.csv file2.csv --output-dir ./reports
 - 有充足的内存和CPU资源
 - 对性能要求极高
 
+### 推荐使用混合对比工具
+- 文件大小 > 1GB
+- 行数 > 1000万行
+- 需要知道具体哪些列、哪些值不同
+- 数据行顺序不一致
+- 有可用的关键列唯一标识行
+- 对性能要求极高
+
 ## 注意事项
 
 1. **内存使用**: 分块大小直接影响内存使用量，建议根据系统内存调整
@@ -199,6 +248,8 @@ python enhanced_report.py file1.csv file2.csv --output-dir ./reports
 4. **数据顺序**: 工具会自动处理数据顺序问题，无需预先排序
 5. **哈希冲突**: 虽然概率极低，但理论上可能存在哈希冲突
 6. **行号追踪**: 行号从1开始计算，包含标题行
+7. **关键列选择**: 混合对比工具需要指定能唯一标识行的关键列
+8. **数据一致性**: 关键列值在对比过程中不应发生变化
 
 ## 故障排除
 
@@ -233,6 +284,11 @@ python enhanced_report.py file1.csv file2.csv --output-dir ./reports
    - 监控内存使用情况
    - 适当调整分块大小
    - 使用垃圾回收优化
+
+4. **混合对比优化**
+   - 关键列数量：越少越好，确保唯一性即可
+   - 分块大小：根据文件大小和内存情况调整
+   - 处理策略：对于超大文件，先Hash对比，再详细分析
 
 ## 扩展功能
 
