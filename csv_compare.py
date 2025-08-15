@@ -264,13 +264,13 @@ class CSVComparator:
                 if diff['type'] == 'count_mismatch':
                     report_lines.append(f"  {i}. 哈希值 {diff['hash'][:16]}...: 文件1({diff['file1_count']}) vs 文件2({diff['file2_count']})")
                     if 'file1_lines' in diff and diff['file1_lines']:
-                        report_lines.append(f"     文件1行号: {', '.join(map(str, sorted(diff['file1_lines']))}")
+                        report_lines.append(f"     文件1行号: {', '.join(map(str, sorted(diff['file1_lines'])))}")
                     if 'file2_lines' in diff and diff['file2_lines']:
-                        report_lines.append(f"     文件2行号: {', '.join(map(str, sorted(diff['file2_lines']))}")
+                        report_lines.append(f"     文件2行号: {', '.join(map(str, sorted(diff['file2_lines'])))}")
                 elif diff['type'] == 'file2_only':
                     report_lines.append(f"  {i}. 哈希值 {diff['hash'][:16]}...: 仅在文件2中出现({diff['file2_count']}次)")
                     if 'file2_lines' in diff and diff['file2_lines']:
-                        report_lines.append(f"     文件2行号: {', '.join(map(str, sorted(diff['file2_lines']))}")
+                        report_lines.append(f"     文件2行号: {', '.join(map(str, sorted(diff['file2_lines'])))}")
         
         report = "\n".join(report_lines)
         
