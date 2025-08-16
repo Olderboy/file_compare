@@ -63,6 +63,28 @@ class ComparisonWorker(QObject):
                 self.key_columns
             )
             
+            self.progress = 80
+            self.progress_updated.emit(self.progress)
+            self.status_updated.emit("正在生成报告...")
+            self.log_updated.emit("正在生成详细报告...")
+            
+            # 生成并保存报告
+            output_report = self.settings.get('output_report')
+            if output_report and output_report.strip():
+                try:
+                    # 确保目录存在
+                    report_dir = os.path.dirname(output_report)
+                    if report_dir and not os.path.exists(report_dir):
+                        os.makedirs(report_dir)
+                    
+                    # 生成报告
+                    report_content = comparator.generate_hybrid_report(result, output_report)
+                    self.log_updated.emit(f"报告已保存到: {output_report}")
+                except Exception as e:
+                    self.log_updated.emit(f"保存报告时出错: {str(e)}")
+            else:
+                self.log_updated.emit("未设置报告输出路径，跳过文件保存")
+            
             self.progress = 100
             self.progress_updated.emit(self.progress)
             self.status_updated.emit("比较完成")

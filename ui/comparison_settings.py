@@ -79,6 +79,7 @@ class ComparisonSettingsWidget(QGroupBox):
         self.report_edit = QLineEdit()
         self.report_edit.setPlaceholderText("选择报告保存路径（可选）")
         self.report_edit.setReadOnly(True)
+        self.report_edit.setMinimumWidth(180)
         
         self.report_button = QPushButton("浏览...")
         self.report_button.clicked.connect(self.select_report_path)
@@ -98,8 +99,133 @@ class ComparisonSettingsWidget(QGroupBox):
         layout.addLayout(grid_layout)
         layout.addWidget(advanced_group)
         
-        # 添加弹性空间
-        layout.addStretch()
+        # 设置样式
+        self.setup_styles()
+        
+    def setup_styles(self):
+        """设置现代化样式"""
+        style_sheet = """
+        QGroupBox {
+            font-weight: 600;
+            font-size: 10pt;
+            border: none;
+            border-radius: 12px;
+            margin-top: 8px;
+            padding: 15px;
+            padding-top: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #2c3e50;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 20px;
+            top: 12px;
+            padding: 0 15px;
+            color: #667eea;
+            font-weight: 700;
+            font-size: 12pt;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        QLabel {
+            color: #2c3e50;
+            font-weight: 500;
+            font-size: 9pt;
+            margin: 5px 0px;
+        }
+        
+        QLineEdit, QSpinBox, QComboBox {
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: white;
+            color: #2c3e50;
+            font-size: 9pt;
+            selection-background-color: #667eea;
+        }
+        
+        QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        QLineEdit:hover, QSpinBox:hover, QComboBox:hover {
+            border-color: #bdc3c7;
+        }
+        
+        QComboBox::drop-down {
+            border: none;
+            width: 20px;
+        }
+        
+        QComboBox::down-arrow {
+            image: none;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #667eea;
+            margin-right: 8px;
+        }
+        
+        QComboBox QAbstractItemView {
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            background: white;
+            selection-background-color: #667eea;
+            selection-color: white;
+        }
+        
+        QPushButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #667eea, stop:1 #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 9pt;
+            min-height: 18px;
+        }
+        
+        QPushButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #5a6fd8, stop:1 #6a4190);
+        }
+        
+        QPushButton:pressed {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #4a5fc8, stop:1 #5a3190);
+        }
+        
+        QCheckBox {
+            spacing: 8px;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+        
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #bdc3c7;
+            border-radius: 4px;
+            background: white;
+        }
+        
+        QCheckBox::indicator:checked {
+            background: #667eea;
+            border-color: #667eea;
+            image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDQuNUw0LjUgOEwxMSAxIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K);
+        }
+        
+        QCheckBox::indicator:hover {
+            border-color: #667eea;
+        }
+        """
+        
+        self.setStyleSheet(style_sheet)
         
     def select_report_path(self):
         """选择报告保存路径"""

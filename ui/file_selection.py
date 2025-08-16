@@ -33,6 +33,7 @@ class FileSelectionWidget(QGroupBox):
         self.file1_edit = QLineEdit()
         self.file1_edit.setPlaceholderText("选择第一个CSV文件")
         self.file1_edit.setReadOnly(True)
+        self.file1_edit.setMinimumWidth(200)
         
         self.file1_button = QPushButton("浏览...")
         self.file1_button.clicked.connect(lambda: self.select_file(self.file1_edit))
@@ -53,6 +54,7 @@ class FileSelectionWidget(QGroupBox):
         self.file2_edit = QLineEdit()
         self.file2_edit.setPlaceholderText("选择第二个CSV文件")
         self.file2_edit.setReadOnly(True)
+        self.file2_edit.setMinimumWidth(200)
         
         self.file2_button = QPushButton("浏览...")
         self.file2_button.clicked.connect(lambda: self.select_file(self.file2_edit))
@@ -68,9 +70,12 @@ class FileSelectionWidget(QGroupBox):
         key_columns_layout = QVBoxLayout(key_columns_group)
         key_columns_layout.setContentsMargins(0, 0, 0, 0)
         
-        key_columns_label = QLabel("关键列 (用逗号分隔):")
+        # 关键列输入
+        key_columns_label = QLabel("关键列名 (用逗号分隔):")
+        key_columns_label.setObjectName("key_columns_label")
         self.key_columns_edit = QLineEdit()
         self.key_columns_edit.setPlaceholderText("例如: id,name")
+        self.key_columns_edit.setMinimumWidth(200)
         
         key_columns_layout.addWidget(key_columns_label)
         key_columns_layout.addWidget(self.key_columns_edit)
@@ -82,6 +87,99 @@ class FileSelectionWidget(QGroupBox):
         self.file_info_label.setStyleSheet("color: #7f8c8d; font-style: italic;")
         self.file_info_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.file_info_label)
+        
+        # 设置样式
+        self.setup_styles()
+        
+    def setup_styles(self):
+        """设置现代化样式"""
+        style_sheet = """
+        QGroupBox {
+            font-weight: 600;
+            font-size: 10pt;
+            border: none;
+            border-radius: 12px;
+            margin-top: 8px;
+            padding: 15px;
+            padding-top: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #2c3e50;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 20px;
+            top: 12px;
+            padding: 0 15px;
+            color: #667eea;
+            font-weight: 700;
+            font-size: 12pt;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        QLineEdit {
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: white;
+            color: #2c3e50;
+            font-size: 9pt;
+            selection-background-color: #667eea;
+        }
+        
+        QLineEdit:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        QLineEdit:hover {
+            border-color: #bdc3c7;
+        }
+        
+        QPushButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #667eea, stop:1 #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 9pt;
+            min-height: 18px;
+        }
+        
+        QPushButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #5a6fd8, stop:1 #6a4190);
+        }
+        
+        QPushButton:pressed {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #4a5fc8, stop:1 #5a3190);
+        }
+        
+        QLabel {
+            color: #2c3e50;
+            font-weight: 500;
+            font-size: 9pt;
+            margin: 5px 0px;
+        }
+        
+        QLabel#key_columns_label {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 10pt;
+            padding: 8px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        """
+        
+        self.setStyleSheet(style_sheet)
         
     def select_file(self, line_edit):
         """选择文件"""

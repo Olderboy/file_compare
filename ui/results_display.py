@@ -42,10 +42,16 @@ class ResultsDisplayWidget(QWidget):
         self.save_report_button.clicked.connect(self.save_report)
         self.save_report_button.setEnabled(False)
         
+        # 添加报告路径显示标签
+        self.report_path_label = QLabel("报告路径: 未设置")
+        self.report_path_label.setObjectName("report_path")
+        self.report_path_label.setWordWrap(True)
+        
         self.clear_button = QPushButton("清空结果")
         self.clear_button.clicked.connect(self.clear_results)
         
         button_layout.addWidget(self.save_report_button)
+        button_layout.addWidget(self.report_path_label)
         button_layout.addStretch()
         button_layout.addWidget(self.clear_button)
         
@@ -53,6 +59,102 @@ class ResultsDisplayWidget(QWidget):
         
         # 存储结果数据
         self.current_result = None
+        self.report_output_path = None
+        
+        # 设置样式
+        self.setup_styles()
+        
+    def setup_styles(self):
+        """设置现代化样式"""
+        style_sheet = """
+        QTabWidget::pane {
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.95);
+            margin-top: 5px;
+        }
+        
+        QTabBar::tab {
+            background: rgba(255, 255, 255, 0.7);
+            border: none;
+            border-radius: 8px 8px 0 0;
+            padding: 12px 20px;
+            margin-right: 3px;
+            color: #7f8c8d;
+            font-weight: 600;
+            min-width: 100px;
+        }
+        
+        QTabBar::tab:selected {
+            background: rgba(255, 255, 255, 0.95);
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        QTabBar::tab:hover:!selected {
+            background: rgba(255, 255, 255, 0.8);
+            color: #5a6fd8;
+        }
+        
+        QTextEdit {
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            background: white;
+            padding: 8px;
+            color: #2c3e50;
+            selection-background-color: #667eea;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        
+        QTextEdit:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        QPushButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #667eea, stop:1 #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-weight: 600;
+            font-size: 10pt;
+            min-height: 20px;
+        }
+        
+        QPushButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #5a6fd8, stop:1 #6a4190);
+        }
+        
+        QPushButton:pressed {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #4a5fc8, stop:1 #5a3190);
+        }
+        
+        QPushButton:disabled {
+            background: #bdc3c7;
+            color: #7f8c8d;
+        }
+        
+        QLabel#report_path {
+            color: #7f8c8d;
+            font-size: 9pt;
+            padding: 8px;
+            background: rgba(236, 240, 241, 0.8);
+            border-radius: 6px;
+            border: 1px solid #e8e8e8;
+        }
+        
+        QLabel#report_path[status="set"] {
+            color: #27ae60;
+            background: rgba(46, 204, 113, 0.1);
+            border-color: #27ae60;
+        }
+        """
+        
+        self.setStyleSheet(style_sheet)
         
     def create_summary_tab(self):
         """创建结果摘要标签页"""
@@ -84,15 +186,28 @@ class ResultsDisplayWidget(QWidget):
         
         return widget
         
-    def display_results(self, result):
+    def display_results(self, result, report_output_path=None):
         """显示比较结果"""
         self.current_result = result
+        self.report_output_path = report_output_path
         
         # 显示结果摘要
         self.display_summary(result)
         
         # 显示详细报告
         self.display_report(result)
+        
+        # 更新报告路径显示
+        if report_output_path and report_output_path.strip():
+            self.report_path_label.setText(f"报告路径: {report_output_path}")
+            self.report_path_label.setProperty("status", "set")
+            self.report_path_label.style().unpolish(self.report_path_label)
+            self.report_path_label.style().polish(self.report_path_label)
+        else:
+            self.report_path_label.setText("报告路径: 未设置")
+            self.report_path_label.setProperty("status", "unset")
+            self.report_path_label.style().unpolish(self.report_path_label)
+            self.report_path_label.style().polish(self.report_path_label)
         
         # 启用按钮
         self.save_report_button.setEnabled(True)
@@ -153,10 +268,19 @@ class ResultsDisplayWidget(QWidget):
             
         from PyQt5.QtWidgets import QFileDialog
         
+        # 使用已设置的报告路径作为默认文件名
+        default_name = "comparison_report.txt"
+        if self.report_output_path and self.report_output_path.strip():
+            # 如果已有输出路径，使用该路径作为默认位置
+            default_path = self.report_output_path
+        else:
+            # 否则使用默认文件名
+            default_path = default_name
+        
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "保存报告",
-            "comparison_report.txt",
+            default_path,
             "文本文件 (*.txt);;所有文件 (*)"
         )
         
@@ -172,8 +296,15 @@ class ResultsDisplayWidget(QWidget):
     def clear_results(self):
         """清空结果"""
         self.current_result = None
+        self.report_output_path = None
         self.summary_text.clear()
         self.report_text.clear()
+        
+        # 重置报告路径显示
+        self.report_path_label.setText("报告路径: 未设置")
+        self.report_path_label.setProperty("status", "unset")
+        self.report_path_label.style().unpolish(self.report_path_label)
+        self.report_path_label.style().polish(self.report_path_label)
         
         # 禁用按钮
         self.save_report_button.setEnabled(False)
