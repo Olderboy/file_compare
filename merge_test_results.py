@@ -2,13 +2,31 @@ import pandas as pd
 import re
 import sys
 import argparse
+import os
 
 def parse_arguments():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description='汇总多组测试数据到总表')
-    parser.add_argument('files', nargs='+', help='要合并的测试CSV文件（至少2个）')
-    parser.add_argument('-o', '--output', default='test_summary.csv', help='输出文件名（默认：test_summary.csv）')
+    parser.add_argument('files', nargs='+', help='要合并的测试文件，支持CSV和Excel格式（至少2个）')
+    parser.add_argument('-o', '--output', default='test_summary.csv', help='输出文件名（默认：test_summary.csv，支持.csv和.xlsx）')
     return parser.parse_args()
+
+def read_file(file_path):
+    """根据文件扩展名自动选择读取方法"""
+    ext = os.path.splitext(file_path)[1].lower()
+    try:
+        if ext == '.xlsx' or ext == '.xls':
+            return pd.read_excel(file_path)
+        elif ext == '.csv':
+            # 尝试多种编码
+            try:
+                return pd.read_csv(file_path, encoding='gbk')
+            except UnicodeDecodeError:
+                return pd.read_csv(file_path, encoding='utf-8-sig')
+        else:
+            raise ValueError(f"不支持的文件格式: {ext}。仅支持.csv、.xlsx和.xls文件")
+    except Exception as e:
+        raise Exception(f"读取文件失败: {e}")
 
 def extract_number_with_unit(value):
     """从字符串中提取数值和单位"""
@@ -45,7 +63,7 @@ def main():
     dfs = []
     for file_path in input_files:
         try:
-            df = pd.read_csv(file_path, encoding='gbk')
+            df = read_file(file_path)
             dfs.append(df)
             print(f"  [OK] {file_path}")
         except Exception as e:
@@ -211,11 +229,27 @@ def main():
     # 保存结果
     print(f"正在保存结果到 {output_file}...")
     try:
-        result_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        # 根据输出文件扩展名选择保存格式
+        output_ext = os.path.splitext(output_file)[1].lower()
+        if output_ext == '.xlsx' or output_ext == '.xls':
+            result_df.to_excel(output_file, index=False, engine='openpyxl')
+        else:
+            result_df.to_csv(output_file, index=False, encoding='utf-8-sig')
         print(f"[OK] 汇总完成！结果已保存到 {output_file}")
     except PermissionError:
-        backup_file = output_file.replace('.csv', '_new.csv')
-        result_df.to_csv(backup_file, index=False, encoding='utf-8-sig')
+        # 生成备用文件名
+        base, ext = os.path.splitext(output_file)
+        if ext in ['.xlsx', '.xls']:
+            backup_file = base + '_new' + ext
+        else:
+            backup_file = output_file.replace('.csv', '_new.csv')
+
+        # 保存到备用文件
+        output_ext = os.path.splitext(backup_file)[1].lower()
+        if output_ext == '.xlsx' or output_ext == '.xls':
+            result_df.to_excel(backup_file, index=False, engine='openpyxl')
+        else:
+            result_df.to_csv(backup_file, index=False, encoding='utf-8-sig')
         print(f"[OK] 汇总完成！结果已保存到 {backup_file}")
 
     print(f"共处理 {num_rows} 行数据，合并了 {len(dfs)} 个测试文件")
