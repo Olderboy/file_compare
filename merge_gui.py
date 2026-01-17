@@ -876,14 +876,57 @@ class MergeGUI:
         for file_path in files:
             try:
                 df = read_file(file_path)
-                dfs.append(df)
-                self.log(f"  ✓ 读取成功: {os.path.basename(file_path)}")
+                self.log(f"  ✓ 读取成功: {os.path.basename(file_path)} ({len(df)} 行)")
+
+                # 检查是否需要根据 OriginFileName 拆分
+                if 'OriginFileName' in df.columns:
+                    # 找出所有拆分点（即 OriginFileName 第一次重复的位置）
+                    seen_files = set()
+                    split_indices = []
+
+                    for idx, origin_file in enumerate(df['OriginFileName']):
+                        if origin_file in seen_files:
+                            split_indices.append(idx)
+                            # 重置，继续查找下一个拆分点
+                            seen_files = set([origin_file])
+                        else:
+                            seen_files.add(origin_file)
+
+                    if split_indices:
+                        # 需要拆分
+                        self.log(f"    → 检测到 {len(split_indices) + 1} 组重复的 OriginFileName，进行拆分...")
+
+                        start_idx = 0
+                        for i, split_idx in enumerate(split_indices):
+                            end_idx = split_idx
+                            df_part = df.iloc[start_idx:end_idx].copy()
+                            dfs.append(df_part)
+                            self.log(f"      - 第 {i+1} 部分: {len(df_part)} 行")
+                            start_idx = split_idx
+
+                        # 添加最后一部分
+                        df_last = df.iloc[start_idx:].copy()
+                        dfs.append(df_last)
+                        self.log(f"      - 第 {len(split_indices) + 1} 部分: {len(df_last)} 行")
+                    else:
+                        # 没有重复，直接添加
+                        dfs.append(df)
+                else:
+                    # 没有 OriginFileName 列，直接添加
+                    dfs.append(df)
+
             except Exception as e:
                 self.log(f"  ✗ 读取失败: {os.path.basename(file_path)} - {e}")
                 raise
 
         if len(dfs) < 2:
-            raise ValueError("至少需要2个测试文件进行合并")
+            raise ValueError("至少需要2个测试数据才能进行合并")
+
+        # 显示拆分后的DataFrame信息
+        self.log(f"\n  共 {len(dfs)} 个 DataFrame 参与合并")
+        for i, df in enumerate(dfs):
+            unique_files = df['OriginFileName'].nunique() if 'OriginFileName' in df.columns else 1
+            self.log(f"    - DataFrame {i+1}: {len(df)} 行, {unique_files} 个不同的 OriginFileName")
 
         # 获取行数
         num_rows = len(dfs[0])
@@ -1127,8 +1170,11 @@ class MergeGUI:
     def start_merge(self):
         """开始合并流程"""
         # 验证输入
-        if len(self.left_files) == 0 or len(self.right_files) == 0:
-            messagebox.showerror("错误", "请至少为左右两边各添加一个文件！")
+        has_left = len(self.left_files) > 0
+        has_right = len(self.right_files) > 0
+
+        if not has_left and not has_right:
+            messagebox.showerror("错误", "请至少添加一个文件！")
             return
 
         # 清空日志
@@ -1144,79 +1190,115 @@ class MergeGUI:
     def execute_merge(self):
         """执行合并操作（在后台线程中）"""
         try:
+            # 检查有哪些数据
+            has_left = len(self.left_files) > 0
+            has_right = len(self.right_files) > 0
+            both_sides = has_left and has_right
+
             # 步骤1: 获取文件列表
             self.log("=" * 60)
-            self.log("🔍 步骤 1: 检查测试文件")
+            if both_sides:
+                self.log("🔍 步骤 1: 检查测试文件")
+            else:
+                self.log("🔍 检查测试文件")
             self.log("=" * 60)
 
             left_files = self.left_files.copy()
             right_files = self.right_files.copy()
 
-            self.log(f"📂 左侧选择了 {len(left_files)} 个文件")
-            for f in left_files:
-                self.log(f"  - {os.path.basename(f)}")
+            if has_left:
+                self.log(f"📂 左侧选择了 {len(left_files)} 个文件")
+                for f in left_files:
+                    self.log(f"  - {os.path.basename(f)}")
 
-            self.log(f"📂 右侧选择了 {len(right_files)} 个文件")
-            for f in right_files:
-                self.log(f"  - {os.path.basename(f)}")
+            if has_right:
+                self.log(f"📂 右侧选择了 {len(right_files)} 个文件")
+                for f in right_files:
+                    self.log(f"  - {os.path.basename(f)}")
 
-            if len(left_files) == 0:
-                raise ValueError("左侧没有选择测试文件")
-            if len(right_files) == 0:
-                raise ValueError("右侧没有选择测试文件")
+            # 判断执行模式
+            if not both_sides:
+                # 单边合并模式
+                self.log("\n📝 检测到只有单边数据，执行单边合并模式")
+                self.log("=" * 60)
 
-            self.update_progress(10, "正在合并左侧数据...")
+                files_to_merge = left_files if has_left else right_files
+                side_label = "左侧" if has_left else "右侧"
+                suffix_label = self.left_suffix.get() if has_left else self.right_suffix.get()
 
-            # 步骤2: 合并左侧文件
-            self.log("\n" + "=" * 60)
-            left_suffix_label = self.left_suffix.get()
-            self.log(f"🔵 步骤 2: 合并左侧数据 ({left_suffix_label})")
-            self.log("=" * 60)
+                self.update_progress(20, f"正在合并{side_label}数据...")
 
-            left_temp = os.path.join(os.path.dirname(self.output_file.get()), "_temp_left_merge.csv")
-            left_merged = self.merge_files(left_files, left_temp)
-            self.log(f"✓ 左侧数据合并完成: {len(left_merged)} 行")
+                self.log(f"\n🔹 合并{side_label}数据 ({suffix_label})")
+                self.log("=" * 60)
 
-            self.update_progress(40, "正在合并右侧数据...")
+                merged_result = self.merge_files(files_to_merge, self.output_file.get())
+                self.log(f"✓ {side_label}数据合并完成: {len(merged_result)} 行, {len(merged_result.columns)} 列")
 
-            # 步骤3: 合并右侧文件
-            self.log("\n" + "=" * 60)
-            right_suffix_label = self.right_suffix.get()
-            self.log(f"🔴 步骤 3: 合并右侧数据 ({right_suffix_label})")
-            self.log("=" * 60)
+                self.update_progress(100, "处理完成！")
 
-            right_temp = os.path.join(os.path.dirname(self.output_file.get()), "_temp_right_merge.csv")
-            right_merged = self.merge_files(right_files, right_temp)
-            self.log(f"✓ 右侧数据合并完成: {len(right_merged)} 行")
+                # 完成
+                self.log("\n" + "=" * 60)
+                self.log("🎉 处理完成！")
+                self.log("=" * 60)
+                self.log(f"📊 结果已保存到: {self.output_file.get()}")
+                self.log(f"📈 总行数: {len(merged_result)}")
+                self.log(f"📋 总列数: {len(merged_result.columns)}")
 
-            self.update_progress(70, "正在对比合并结果...")
+                messagebox.showinfo("成功", f"{side_label}数据合并完成！\n\n结果已保存到:\n{self.output_file.get()}")
+            else:
+                # 双边对比模式
+                self.update_progress(10, "正在合并左侧数据...")
 
-            # 步骤4: 对比两个结果
-            self.log("\n" + "=" * 60)
-            self.log("⚖️  步骤 4: 对比两个合并结果")
-            self.log("=" * 60)
+                # 步骤2: 合并左侧文件
+                self.log("\n" + "=" * 60)
+                left_suffix_label = self.left_suffix.get()
+                self.log(f"🔵 步骤 2: 合并左侧数据 ({left_suffix_label})")
+                self.log("=" * 60)
 
-            final_result = self.compare_results(left_merged, right_merged, self.output_file.get())
-            self.log(f"✓ 对比完成: {len(final_result)} 行, {len(final_result.columns)} 列")
+                left_temp = os.path.join(os.path.dirname(self.output_file.get()), "_temp_left_merge.csv")
+                left_merged = self.merge_files(left_files, left_temp)
+                self.log(f"✓ 左侧数据合并完成: {len(left_merged)} 行")
 
-            self.update_progress(100, "处理完成！")
+                self.update_progress(40, "正在合并右侧数据...")
 
-            # 清理临时文件
-            try:
-                os.remove(left_temp)
-                os.remove(right_temp)
-            except:
-                pass
+                # 步骤3: 合并右侧文件
+                self.log("\n" + "=" * 60)
+                right_suffix_label = self.right_suffix.get()
+                self.log(f"🔴 步骤 3: 合并右侧数据 ({right_suffix_label})")
+                self.log("=" * 60)
 
-            # 完成
-            self.log("\n" + "=" * 60)
-            self.log("🎉 处理完成！")
-            self.log("=" * 60)
-            self.log(f"📊 结果已保存到: {self.output_file.get()}")
-            self.log(f"📈 总行数: {len(final_result)}")
-            self.log(f"📋 总列数: {len(final_result.columns)}")
+                right_temp = os.path.join(os.path.dirname(self.output_file.get()), "_temp_right_merge.csv")
+                right_merged = self.merge_files(right_files, right_temp)
+                self.log(f"✓ 右侧数据合并完成: {len(right_merged)} 行")
 
-            messagebox.showinfo("成功", f"合并对比完成！\n\n结果已保存到:\n{self.output_file.get()}")
+                self.update_progress(70, "正在对比合并结果...")
+
+                # 步骤4: 对比两个结果
+                self.log("\n" + "=" * 60)
+                self.log("⚖️  步骤 4: 对比两个合并结果")
+                self.log("=" * 60)
+
+                final_result = self.compare_results(left_merged, right_merged, self.output_file.get())
+                self.log(f"✓ 对比完成: {len(final_result)} 行, {len(final_result.columns)} 列")
+
+                self.update_progress(100, "处理完成！")
+
+                # 清理临时文件
+                try:
+                    os.remove(left_temp)
+                    os.remove(right_temp)
+                except:
+                    pass
+
+                # 完成
+                self.log("\n" + "=" * 60)
+                self.log("🎉 处理完成！")
+                self.log("=" * 60)
+                self.log(f"📊 结果已保存到: {self.output_file.get()}")
+                self.log(f"📈 总行数: {len(final_result)}")
+                self.log(f"📋 总列数: {len(final_result.columns)}")
+
+                messagebox.showinfo("成功", f"合并对比完成！\n\n结果已保存到:\n{self.output_file.get()}")
 
         except Exception as e:
             self.log(f"\n❌ 错误: {str(e)}")
