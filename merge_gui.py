@@ -5,6 +5,10 @@ import os
 import sys
 from threading import Thread
 import glob
+import subprocess
+import platform
+import json
+from datetime import datetime
 
 # 导入合并功能
 sys.path.append(os.path.dirname(__file__))
@@ -16,8 +20,8 @@ class MergeGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("测试结果合并对比工具")
-        self.root.geometry("1000x800")
-        self.root.minsize(900, 700)
+        self.root.geometry("1100x1050")
+        self.root.minsize(1000, 950)
 
         # 设置现代化主题颜色
         self.colors = {
@@ -55,6 +59,16 @@ class MergeGUI:
         self.right_suffix = tk.StringVar(value="sr")
         self.left_files = []
         self.right_files = []
+
+        # 统计列配置（默认值）
+        self.numeric_columns_var = tk.StringVar(value="TotalTimeCount,DownloadFileTime,InterfaceRequestTime,WriteLocalTime,StartMemory,EndMemory,MaxMemory,MaxCpu")
+        self.original_only_columns_var = tk.StringVar(value="FileCount")
+        self.custom_separator_columns_var = tk.StringVar(value="EndTimeRecord:||")
+
+        # 历史记录
+        self.history_file = os.path.join(os.path.dirname(__file__), '.merge_history.json')
+        self.max_history_items = 10
+        self.history = self.load_history()
 
         # 创建主框架
         self.create_header()
@@ -112,11 +126,11 @@ class MergeGUI:
     def create_main_content(self):
         """创建主内容区"""
         main_frame = tk.Frame(self.root, bg=self.colors['bg'])
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
 
         # 第一步：选择目录
         step1 = self.create_step_card(main_frame, "步骤 1: 选择测试数据目录", "选择两个包含测试结果的目录")
-        step1.pack(fill=tk.X, pady=(0, 15))
+        step1.pack(fill=tk.X, pady=(0, 10))
 
         # 左侧目录和文件
         left_container = tk.Frame(step1, bg=self.colors['card_bg'])
@@ -184,7 +198,7 @@ class MergeGUI:
             font=("Microsoft YaHei UI", 9),
             bg=self.colors['input_bg'],
             fg=self.colors['text'],
-            height=4,
+            height=3,
             selectmode=tk.MULTIPLE,
             relief=tk.SOLID,
             bd=1,
@@ -316,7 +330,7 @@ class MergeGUI:
             font=("Microsoft YaHei UI", 9),
             bg=self.colors['input_bg'],
             fg=self.colors['text'],
-            height=4,
+            height=3,
             selectmode=tk.MULTIPLE,
             relief=tk.SOLID,
             bd=1,
@@ -381,10 +395,10 @@ class MergeGUI:
 
         # 第二步：配置列后缀
         step2 = self.create_step_card(main_frame, "步骤 2: 配置列名后缀", "为左右两边的数据列设置自定义后缀")
-        step2.pack(fill=tk.X, pady=(0, 15))
+        step2.pack(fill=tk.X, pady=(0, 10))
 
         suffix_frame = tk.Frame(step2, bg=self.colors['card_bg'])
-        suffix_frame.pack(fill=tk.X, padx=15, pady=10)
+        suffix_frame.pack(fill=tk.X, padx=15, pady=8)
 
         # 左侧后缀
         left_suffix_frame = tk.Frame(suffix_frame, bg=self.colors['card_bg'])
@@ -456,12 +470,112 @@ class MergeGUI:
             fg=self.colors['text_secondary']
         ).pack(side=tk.LEFT)
 
-        # 第三步：选择输出文件
-        step3 = self.create_step_card(main_frame, "步骤 3: 选择输出文件", "指定最终对比结果的保存路径")
+        # 第三步：配置统计列
+        step3 = self.create_step_card(main_frame, "步骤 3: 配置统计列", "设置需要统计和计算的列名")
         step3.pack(fill=tk.X, pady=(0, 15))
 
-        output_frame = tk.Frame(step3, bg=self.colors['card_bg'])
-        output_frame.pack(fill=tk.X, padx=15, pady=10)
+        columns_frame = tk.Frame(step3, bg=self.colors['card_bg'])
+        columns_frame.pack(fill=tk.X, padx=15, pady=8)
+
+        # 第一行：数值统计列
+        numeric_frame = tk.Frame(columns_frame, bg=self.colors['card_bg'])
+        numeric_frame.pack(fill=tk.X, pady=3)
+
+        tk.Label(
+            numeric_frame,
+            text="📊 数值统计列:",
+            font=("Microsoft YaHei UI", 9, "bold"),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text'],
+            width=14,
+            anchor='w'
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        numeric_entry = tk.Entry(
+            numeric_frame,
+            textvariable=self.numeric_columns_var,
+            font=("Microsoft YaHei UI", 9),
+            bg=self.colors['input_bg'],
+            relief=tk.SOLID,
+            bd=1,
+            highlightthickness=1,
+            highlightbackground=self.colors['input_border'],
+            highlightcolor=self.colors['input_focus']
+        )
+        numeric_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+
+        tk.Label(
+            numeric_frame,
+            text="计算平均值",
+            font=("Microsoft YaHei UI", 8),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text_secondary']
+        ).pack(side=tk.LEFT)
+
+        # 第二行：仅原始值列 + 自定义分隔符列（并排）
+        row2_frame = tk.Frame(columns_frame, bg=self.colors['card_bg'])
+        row2_frame.pack(fill=tk.X, pady=3)
+
+        # 左侧：仅原始值列
+        left_row2 = tk.Frame(row2_frame, bg=self.colors['card_bg'])
+        left_row2.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+
+        tk.Label(
+            left_row2,
+            text="📝 仅原始值:",
+            font=("Microsoft YaHei UI", 9, "bold"),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text'],
+            width=12,
+            anchor='w'
+        ).pack(side=tk.LEFT, padx=(0, 5))
+
+        original_entry = tk.Entry(
+            left_row2,
+            textvariable=self.original_only_columns_var,
+            font=("Microsoft YaHei UI", 9),
+            bg=self.colors['input_bg'],
+            relief=tk.SOLID,
+            bd=1,
+            highlightthickness=1,
+            highlightbackground=self.colors['input_border'],
+            highlightcolor=self.colors['input_focus']
+        )
+        original_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # 右侧：自定义分隔符列
+        right_row2 = tk.Frame(row2_frame, bg=self.colors['card_bg'])
+        right_row2.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Label(
+            right_row2,
+            text="🔧 自定义分隔符:",
+            font=("Microsoft YaHei UI", 9, "bold"),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text'],
+            width=14,
+            anchor='w'
+        ).pack(side=tk.LEFT, padx=(0, 5))
+
+        custom_entry = tk.Entry(
+            right_row2,
+            textvariable=self.custom_separator_columns_var,
+            font=("Microsoft YaHei UI", 9),
+            bg=self.colors['input_bg'],
+            relief=tk.SOLID,
+            bd=1,
+            highlightthickness=1,
+            highlightbackground=self.colors['input_border'],
+            highlightcolor=self.colors['input_focus']
+        )
+        custom_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # 第四步：选择输出文件
+        step4 = self.create_step_card(main_frame, "步骤 4: 选择输出文件", "指定最终对比结果的保存路径")
+        step4.pack(fill=tk.X, pady=(0, 10))
+
+        output_frame = tk.Frame(step4, bg=self.colors['card_bg'])
+        output_frame.pack(fill=tk.X, padx=15, pady=8)
 
         tk.Label(
             output_frame,
@@ -500,33 +614,33 @@ class MergeGUI:
             activeforeground='white'
         ).pack(side=tk.LEFT)
 
-        # 第四步：进度和控制
-        step4 = self.create_step_card(main_frame, "步骤 4: 执行合并", "点击开始按钮执行合并操作")
-        step4.pack(fill=tk.X, pady=(0, 15))
+        # 第五步：进度和控制
+        step5 = self.create_step_card(main_frame, "步骤 5: 执行合并", "点击开始按钮执行合并操作")
+        step5.pack(fill=tk.X, pady=(0, 10))
 
         # 进度条
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(
-            step4,
+            step5,
             variable=self.progress_var,
             maximum=100,
             style='Custom.Horizontal.TProgressbar'
         )
-        self.progress_bar.pack(fill=tk.X, padx=15, pady=(10, 5))
+        self.progress_bar.pack(fill=tk.X, padx=15, pady=(8, 4))
 
         # 状态标签
         self.status_label = tk.Label(
-            step4,
+            step5,
             text="等待开始...",
             font=("Microsoft YaHei UI", 9),
             bg=self.colors['card_bg'],
             fg=self.colors['text_secondary']
         )
-        self.status_label.pack(pady=(0, 10))
+        self.status_label.pack(pady=(0, 8))
 
         # 开始按钮
-        button_frame = tk.Frame(step4, bg=self.colors['card_bg'])
-        button_frame.pack(pady=(0, 10))
+        button_frame = tk.Frame(step5, bg=self.colors['card_bg'])
+        button_frame.pack(pady=(0, 8))
 
         self.start_button = tk.Button(
             button_frame,
@@ -545,12 +659,12 @@ class MergeGUI:
         )
         self.start_button.pack()
 
-        # 第五步：日志输出
-        step5 = self.create_step_card(main_frame, "执行日志", "显示详细的执行过程")
-        step5.pack(fill=tk.BOTH, expand=True)
+        # 第六步：日志输出
+        step6 = self.create_step_card(main_frame, "执行日志", "显示详细的执行过程")
+        step6.pack(fill=tk.BOTH, expand=True)
 
         # 创建日志文本框
-        log_frame = tk.Frame(step5, bg=self.colors['card_bg'])
+        log_frame = tk.Frame(step6, bg=self.colors['card_bg'])
         log_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
 
         # 添加滚动条
@@ -663,20 +777,58 @@ class MergeGUI:
 
     def create_footer(self):
         """创建页脚"""
-        footer = tk.Frame(self.root, bg=self.colors['header_bg'], height=45)
+        footer = tk.Frame(self.root, bg=self.colors['header_bg'], height=55)
         footer.pack(fill=tk.X, side=tk.BOTTOM)
         footer.pack_propagate(False)
 
         footer_content = tk.Frame(footer, bg=self.colors['header_bg'])
         footer_content.pack(expand=True)
 
+        # 左侧信息
+        info_frame = tk.Frame(footer_content, bg=self.colors['header_bg'])
+        info_frame.pack(side=tk.LEFT, padx=20)
+
         tk.Label(
-            footer_content,
-            text="✓ 支持格式: CSV, Excel (.xlsx, .xls)  |  ✓ 自动合并多组数据并计算均值  |  ✓ 灵活的文件选择",
+            info_frame,
+            text="✓ 支持格式: CSV, Excel (.xlsx, .xls)",
             font=("Microsoft YaHei UI", 9),
             bg=self.colors['header_bg'],
             fg=self.colors['header_fg']
-        ).pack(pady=12)
+        ).pack(side=tk.LEFT, padx=10)
+
+        # 右侧按钮
+        btn_frame = tk.Frame(footer_content, bg=self.colors['header_bg'])
+        btn_frame.pack(side=tk.RIGHT, padx=20)
+
+        tk.Button(
+            btn_frame,
+            text="📜 历史记录",
+            font=("Microsoft YaHei UI", 9),
+            bg='#5B7CFA',
+            fg='white',
+            relief=tk.FLAT,
+            cursor='hand2',
+            padx=15,
+            pady=5,
+            bd=0,
+            activebackground='#4A6BFA',
+            command=self.show_history_dialog
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            btn_frame,
+            text="🗑️ 清空历史",
+            font=("Microsoft YaHei UI", 9),
+            bg='#E74C3C',
+            fg='white',
+            relief=tk.FLAT,
+            cursor='hand2',
+            padx=15,
+            pady=5,
+            bd=0,
+            activebackground='#C0392B',
+            command=self.clear_history
+        ).pack(side=tk.LEFT, padx=5)
 
     def browse_left_dir(self):
         """浏览左侧目录"""
@@ -740,6 +892,325 @@ class MergeGUI:
             file_list.append(file_path)
 
         self.log(f"  自动加载了 {len(files)} 个文件到{'左侧' if side == 'left' else '右侧'}列表")
+
+    def load_history(self):
+        """加载历史记录"""
+        try:
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            return {'records': []}
+        except Exception as e:
+            self.log(f"⚠️  加载历史记录失败: {e}")
+            return {'records': []}
+
+    def save_history(self):
+        """保存历史记录"""
+        try:
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.history, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self.log(f"⚠️  保存历史记录失败: {e}")
+
+    def add_to_history(self, left_files, right_files, output_file):
+        """添加记录到历史（如果配置相同则覆盖已有记录）"""
+        # 创建新记录
+        new_record = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'left_files': [os.path.basename(f) for f in left_files],
+            'left_paths': left_files,
+            'right_files': [os.path.basename(f) for f in right_files],
+            'right_paths': right_files,
+            'output_file': output_file,
+            'config': {
+                'left_suffix': self.left_suffix.get(),
+                'right_suffix': self.right_suffix.get(),
+                'numeric_columns': self.numeric_columns_var.get(),
+                'original_only_columns': self.original_only_columns_var.get(),
+                'custom_separator_columns': self.custom_separator_columns_var.get()
+            }
+        }
+
+        # 检查是否已存在相同的配置记录
+        # 比较依据：文件路径（排序后）和所有配置项
+        left_paths_sorted = sorted(left_files)
+        right_paths_sorted = sorted(right_files)
+        new_config = new_record['config']
+
+        # 查找匹配的现有记录
+        matched_index = None
+        for idx, existing_record in enumerate(self.history['records']):
+            # 检查文件路径是否相同（数量和路径都要匹配）
+            existing_left_sorted = sorted(existing_record['left_paths'])
+            existing_right_sorted = sorted(existing_record['right_paths'])
+
+            if (existing_left_sorted == left_paths_sorted and
+                existing_right_sorted == right_paths_sorted and
+                existing_record['config'] == new_config):
+                matched_index = idx
+                break
+
+        if matched_index is not None:
+            # 覆盖已有记录（更新时间戳）
+            self.history['records'].pop(matched_index)
+            self.history['records'].insert(0, new_record)
+            self.log(f"💾 已更新历史记录（覆盖重复配置）")
+        else:
+            # 新增记录
+            self.history['records'].insert(0, new_record)
+            self.log(f"💾 已保存到历史记录")
+
+        # 限制历史记录数量
+        if len(self.history['records']) > self.max_history_items:
+            self.history['records'] = self.history['records'][:self.max_history_items]
+
+        self.save_history()
+
+    def load_history_record(self, record):
+        """加载历史记录"""
+        try:
+            # 加载配置
+            config = record.get('config', {})
+            if config:
+                self.left_suffix.set(config.get('left_suffix', 'gauss'))
+                self.right_suffix.set(config.get('right_suffix', 'sr'))
+                self.numeric_columns_var.set(config.get('numeric_columns', ''))
+                self.original_only_columns_var.set(config.get('original_only_columns', ''))
+                self.custom_separator_columns_var.set(config.get('custom_separator_columns', ''))
+
+            # 加载文件
+            left_paths = record.get('left_paths', [])
+            right_paths = record.get('right_paths', [])
+
+            # 清空现有文件
+            self.clear_files('left')
+            self.clear_files('right')
+
+            # 加载左侧文件
+            for file_path in left_paths:
+                if os.path.exists(file_path):
+                    if file_path not in self.left_files:
+                        filename = os.path.basename(file_path)
+                        self.left_file_listbox.insert(tk.END, filename)
+                        self.left_files.append(file_path)
+
+            # 加载右侧文件
+            for file_path in right_paths:
+                if os.path.exists(file_path):
+                    if file_path not in self.right_files:
+                        filename = os.path.basename(file_path)
+                        self.right_file_listbox.insert(tk.END, filename)
+                        self.right_files.append(file_path)
+
+            # 加载输出文件
+            output_file = record.get('output_file', '')
+            if output_file:
+                self.output_file.set(output_file)
+
+            self.log(f"✓ 已加载历史记录: {record.get('timestamp', '')}")
+            messagebox.showinfo("成功", "历史记录加载成功！")
+
+        except Exception as e:
+            self.log(f"✗ 加载历史记录失败: {e}")
+            messagebox.showerror("错误", f"加载历史记录失败:\n{e}")
+
+    def show_history_dialog(self):
+        """显示历史记录对话框"""
+        # 创建历史记录窗口
+        history_window = tk.Toplevel(self.root)
+        history_window.title("历史记录")
+        history_window.geometry("900x600")
+        history_window.configure(bg=self.colors['bg'])
+        history_window.transient(self.root)
+        history_window.grab_set()
+
+        # 标题
+        header = tk.Frame(history_window, bg=self.colors['header_bg'], height=60)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+
+        tk.Label(
+            header,
+            text="📜 历史记录",
+            font=("Microsoft YaHei UI", 16, "bold"),
+            bg=self.colors['header_bg'],
+            fg=self.colors['header_fg']
+        ).pack(pady=15)
+
+        # 历史记录列表
+        list_frame = tk.Frame(history_window, bg=self.colors['card_bg'])
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # 创建滚动区域
+        canvas = tk.Canvas(list_frame, bg=self.colors['card_bg'], highlightthickness=0)
+        scrollbar = tk.Scrollbar(list_frame, orient=tk.VERTICAL, command=canvas.yview)
+
+        scrollable_frame = tk.Frame(canvas, bg=self.colors['card_bg'])
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 显示历史记录
+        records = self.history.get('records', [])
+
+        if not records:
+            tk.Label(
+                scrollable_frame,
+                text="暂无历史记录",
+                font=("Microsoft YaHei UI", 12),
+                bg=self.colors['card_bg'],
+                fg=self.colors['text_secondary']
+            ).pack(pady=50)
+        else:
+            for i, record in enumerate(records):
+                self.create_history_item(scrollable_frame, record, i, history_window)
+
+        # 关闭按钮
+        btn_frame = tk.Frame(history_window, bg=self.colors['bg'])
+        btn_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
+
+        tk.Button(
+            btn_frame,
+            text="关闭",
+            font=("Microsoft YaHei UI", 10),
+            bg=self.colors['accent'],
+            fg='white',
+            relief=tk.FLAT,
+            cursor='hand2',
+            padx=30,
+            pady=8,
+            bd=0,
+            command=history_window.destroy
+        ).pack()
+
+    def create_history_item(self, parent, record, index, window):
+        """创建历史记录项"""
+        item_frame = tk.Frame(
+            parent,
+            bg=self.colors['card_bg'],
+            relief=tk.SOLID,
+            bd=1,
+            highlightbackground=self.colors['border'],
+            highlightthickness=1
+        )
+        item_frame.pack(fill=tk.X, padx=10, pady=8)
+
+        # 时间戳
+        timestamp = record.get('timestamp', '未知时间')
+        tk.Label(
+            item_frame,
+            text=f"📅 {timestamp}",
+            font=("Microsoft YaHei UI", 10, "bold"),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text']
+        ).pack(anchor='w', padx=15, pady=(10, 5))
+
+        # 文件信息
+        left_files = record.get('left_files', [])
+        right_files = record.get('right_files', [])
+
+        info_frame = tk.Frame(item_frame, bg=self.colors['card_bg'])
+        info_frame.pack(fill=tk.X, padx=15, pady=5)
+
+        # 左侧文件
+        tk.Label(
+            info_frame,
+            text=f"🔵 左侧 ({len(left_files)} 个):",
+            font=("Microsoft YaHei UI", 9),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text_secondary']
+        ).pack(anchor='w')
+
+        tk.Label(
+            info_frame,
+            text=", ".join(left_files[:3]) + ("..." if len(left_files) > 3 else ""),
+            font=("Microsoft YaHei UI", 8),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text']
+        ).pack(anchor='w', padx=(20, 0))
+
+        # 右侧文件
+        tk.Label(
+            info_frame,
+            text=f"🔴 右侧 ({len(right_files)} 个):",
+            font=("Microsoft YaHei UI", 9),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text_secondary']
+        ).pack(anchor='w', pady=(5, 0))
+
+        tk.Label(
+            info_frame,
+            text=", ".join(right_files[:3]) + ("..." if len(right_files) > 3 else ""),
+            font=("Microsoft YaHei UI", 8),
+            bg=self.colors['card_bg'],
+            fg=self.colors['text']
+        ).pack(anchor='w', padx=(20, 0))
+
+        # 按钮
+        btn_frame = tk.Frame(item_frame, bg=self.colors['card_bg'])
+        btn_frame.pack(fill=tk.X, padx=15, pady=(10, 10))
+
+        tk.Button(
+            btn_frame,
+            text="📂 加载此记录",
+            font=("Microsoft YaHei UI", 9),
+            bg=self.colors['success'],
+            fg='white',
+            relief=tk.FLAT,
+            cursor='hand2',
+            padx=15,
+            pady=5,
+            bd=0,
+            activebackground=self.colors['success_hover'],
+            command=lambda: self.load_history_record(record)
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        tk.Button(
+            btn_frame,
+            text="🗑️ 删除",
+            font=("Microsoft YaHei UI", 9),
+            bg=self.colors['error'],
+            fg='white',
+            relief=tk.FLAT,
+            cursor='hand2',
+            padx=15,
+            pady=5,
+            bd=0,
+            activebackground='#c0392b',
+            command=lambda: self.delete_history_record(index, window)
+        ).pack(side=tk.LEFT)
+
+    def delete_history_record(self, index, window):
+        """删除历史记录"""
+        if messagebox.askyesno("确认", "确定要删除这条历史记录吗？"):
+            try:
+                del self.history['records'][index]
+                self.save_history()
+                window.destroy()
+                self.show_history_dialog()  # 重新显示对话框
+                self.log("🗑️  已删除历史记录")
+            except Exception as e:
+                self.log(f"✗ 删除历史记录失败: {e}")
+                messagebox.showerror("错误", f"删除失败:\n{e}")
+
+    def clear_history(self):
+        """清空所有历史记录"""
+        if messagebox.askyesno("确认", "确定要清空所有历史记录吗？\n此操作不可恢复！"):
+            try:
+                self.history['records'] = []
+                self.save_history()
+                self.log("🗑️  已清空所有历史记录")
+                messagebox.showinfo("成功", "历史记录已清空！")
+            except Exception as e:
+                self.log(f"✗ 清空历史记录失败: {e}")
+                messagebox.showerror("错误", f"清空失败:\n{e}")
 
     def add_left_files(self):
         """添加左侧文件"""
@@ -853,6 +1324,20 @@ class MergeGUI:
         self.log_text.see(tk.END)
         self.root.update()
 
+    def open_file(self, file_path):
+        """打开文件（使用系统默认程序）"""
+        try:
+            if platform.system() == 'Windows':
+                os.startfile(file_path)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.call(['open', file_path])
+            else:  # Linux
+                subprocess.call(['xdg-open', file_path])
+            self.log(f"📂 已打开文件: {file_path}")
+        except Exception as e:
+            self.log(f"⚠️  无法打开文件: {e}")
+            messagebox.showwarning("警告", f"无法打开文件:\n{e}")
+
     def update_progress(self, value, status):
         """更新进度"""
         self.progress_var.set(value)
@@ -931,16 +1416,31 @@ class MergeGUI:
         # 获取行数
         num_rows = len(dfs[0])
 
-        # 基础列
-        base_columns = ['OriginFileName', 'PreferenceStdFileName', 'Type', 'Level', 'Env&Ver', 'Row&Column']
-
-        # 数值列
-        numeric_columns = ['TotalTimeCount', 'DownloadFileTime', 'InterfaceRequestTime', 'WriteLocalTime',
-                          'StartMemory', 'EndMemory', 'MaxMemory', 'MaxCpu']
+        # 从界面获取列配置
+        # 数值列配置
+        numeric_columns_str = self.numeric_columns_var.get().strip()
+        numeric_columns = [col.strip() for col in numeric_columns_str.split(',') if col.strip()] if numeric_columns_str else []
 
         # 只合并原始值的列
-        original_only_columns = ['FileCount']
-        custom_separator_columns = {'EndTimeRecord': '||'}
+        original_only_columns_str = self.original_only_columns_var.get().strip()
+        original_only_columns = [col.strip() for col in original_only_columns_str.split(',') if col.strip()] if original_only_columns_str else []
+
+        # 自定义分隔符的列
+        custom_separator_columns_str = self.custom_separator_columns_var.get().strip()
+        custom_separator_columns = {}
+        if custom_separator_columns_str:
+            for item in custom_separator_columns_str.split(','):
+                if ':' in item:
+                    col, sep = item.split(':', 1)
+                    custom_separator_columns[col.strip()] = sep.strip()
+
+        # 基础列（固定）
+        base_columns = ['OriginFileName', 'PreferenceStdFileName', 'Type', 'Level', 'Env&Ver', 'Row&Column']
+
+        self.log(f"\n📋 列配置:")
+        self.log(f"  - 数值统计列 ({len(numeric_columns)}): {', '.join(numeric_columns)}")
+        self.log(f"  - 仅原始值列 ({len(original_only_columns)}): {', '.join(original_only_columns)}")
+        self.log(f"  - 自定义分隔符列 ({len(custom_separator_columns)}): {', '.join([f'{k}:{v}' for k, v in custom_separator_columns.items()])}")
 
         # 创建汇总结果
         result_df = dfs[0][base_columns].copy()
@@ -1244,7 +1744,20 @@ class MergeGUI:
                 self.log(f"📈 总行数: {len(merged_result)}")
                 self.log(f"📋 总列数: {len(merged_result.columns)}")
 
-                messagebox.showinfo("成功", f"{side_label}数据合并完成！\n\n结果已保存到:\n{self.output_file.get()}")
+                # 询问是否打开文件
+                result = messagebox.askyesno(
+                    "成功",
+                    f"{side_label}数据合并完成！\n\n结果已保存到:\n{self.output_file.get()}\n\n是否立即打开结果文件？",
+                    icon=messagebox.INFO
+                )
+                if result:
+                    self.open_file(self.output_file.get())
+
+                # 保存到历史记录
+                try:
+                    self.add_to_history(files_to_merge if side_label == "左侧" else [], [], self.output_file.get())
+                except Exception as e:
+                    self.log(f"⚠️  保存历史记录失败: {e}")
             else:
                 # 双边对比模式
                 self.update_progress(10, "正在合并左侧数据...")
@@ -1298,7 +1811,20 @@ class MergeGUI:
                 self.log(f"📈 总行数: {len(final_result)}")
                 self.log(f"📋 总列数: {len(final_result.columns)}")
 
-                messagebox.showinfo("成功", f"合并对比完成！\n\n结果已保存到:\n{self.output_file.get()}")
+                # 询问是否打开文件
+                result = messagebox.askyesno(
+                    "成功",
+                    f"合并对比完成！\n\n结果已保存到:\n{self.output_file.get()}\n\n是否立即打开结果文件？",
+                    icon=messagebox.INFO
+                )
+                if result:
+                    self.open_file(self.output_file.get())
+
+                # 保存到历史记录
+                try:
+                    self.add_to_history(left_files, right_files, self.output_file.get())
+                except Exception as e:
+                    self.log(f"⚠️  保存历史记录失败: {e}")
 
         except Exception as e:
             self.log(f"\n❌ 错误: {str(e)}")

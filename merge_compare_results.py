@@ -27,17 +27,79 @@ def read_file(file_path):
     except Exception as e:
         raise Exception(f"读取文件失败: {e}")
 
-def save_file(df, file_path):
-    """根据文件扩展名自动选择保存方法"""
+def save_file(df, file_path, status_columns=None):
+    """根据文件扩展名自动选择保存方法
+
+    Args:
+        df: 要保存的DataFrame
+        file_path: 输出文件路径
+        status_columns: 状态列字典，格式: {列名: {状态值: 颜色}}
+                       例如: {'TotalTimeCount_状态': {'✓ 提升': '90EE90', '✗ 劣化': 'FFB6C1'}}
+    """
     output_ext = os.path.splitext(file_path)[1].lower()
     try:
         if output_ext == '.xlsx' or output_ext == '.xls':
-            df.to_excel(file_path, index=False, engine='openpyxl')
+            # 如果有状态列，使用带颜色的保存
+            if status_columns:
+                save_excel_with_colors(df, file_path, status_columns)
+            else:
+                df.to_excel(file_path, index=False, engine='openpyxl')
         else:
             df.to_csv(file_path, index=False, encoding='utf-8-sig')
         return True
     except Exception as e:
         return False
+
+
+def save_excel_with_colors(df, file_path, status_columns):
+    """保存Excel文件并根据状态列设置单元格颜色
+
+    Args:
+        df: 要保存的DataFrame
+        file_path: 输出文件路径
+        status_columns: 状态列字典，格式: {列名: {状态值: 颜色}}
+    """
+    from openpyxl import Workbook
+    from openpyxl.utils.dataframe import dataframe_to_rows
+    from openpyxl.styles import PatternFill
+
+    # 创建工作簿
+    wb = Workbook()
+    ws = wb.active
+
+    # 将DataFrame数据写入工作表
+    for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
+        for c_idx, value in enumerate(row, 1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+
+            # 设置第一行（表头）的样式
+            if r_idx == 1:
+                cell.fill = PatternFill(start_color='D3D3D3', end_color='D3D3D3', fill_type='solid')
+                from openpyxl.styles import Font
+                cell.font = Font(bold=True)
+
+    # 根据状态列设置颜色
+    for col_name, status_colors in status_columns.items():
+        if col_name not in df.columns:
+            continue
+
+        # 找到状态列的索引
+        col_idx = df.columns.get_loc(col_name) + 1  # +1 因为openpyxl是1-based
+
+        # 遍历每一行（跳过表头）
+        for r_idx in range(2, len(df) + 2):
+            cell = ws.cell(row=r_idx, column=col_idx)
+            status_value = str(cell.value) if cell.value else ""
+
+            # 根据状态值设置颜色
+            for status, color in status_colors.items():
+                if status in status_value:
+                    # 淡色背景
+                    cell.fill = PatternFill(start_color=color, end_color=color, fill_type='solid')
+                    break
+
+    # 保存文件
+    wb.save(file_path)
 
 def main():
     """主函数"""
